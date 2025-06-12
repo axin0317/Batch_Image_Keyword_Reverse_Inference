@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <meta http-equiv="X-Content-Type-Options" content="nosniff">
+    <title>Axin豆包提示词反推工具</title>
+    <style>
+        /* 基本样式 */
+        body {
+            font-family: sans-serif;
+            margin: 0;
+            background-color: #f4f4f4;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+        .top-nav {
+            background-color: #007bff;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .nav-button {
+            background-color: transparent;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 0 10px;
+            cursor: pointer;
+            font-size: 16px;
+            border-radius: 4px;
+            transition: background-color 0.3s;
+        }
+        .nav-button:hover, .nav-button.active {
+            background-color: #0056b3;
+        }
+        .page-container {
+            flex-grow: 1;
+            padding: 20px;
+            display: none; /* 默认隐藏所有页面 */
+        }
+        .page-container.active {
+            display: block;
+        }
+        .content-wrapper {
+            display: flex;
+            gap: 20px;
+            height: calc(100vh - 120px); /* 减去顶部导航和一些边距的高度 */
+        }
+        .left-panel {
+            flex: 1; /* 占据三分之一 */
+            display: flex;
+            flex-direction: column;
+        }
+        .right-panel {
+            flex: 2; /* 占据三分之二 */
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            height: calc(100vh - 150px); /* 确保右侧面板有足够的高度 */
+            overflow: hidden; /* 防止溢出 */
+        }
+        .panel-section {
+            background-color: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.05);
+            overflow-y: auto; /* 如果内容过多则滚动 */
+        }
+        .image-selection-area {
+            flex: 0 0 auto; /* 不伸缩，保持自身大小 */
+        }
+        .image-preview-area {
+            flex: 1 1 auto; /* 可伸缩，占据剩余空间 */
+            display: flex;
+            flex-direction: column;
+            min-height: 300px; /* 增加最小高度 */
+            max-height: none; /* 移除最大高度限制 */
+            overflow: auto; /* 允许滚动 */
+        }
+        #selectedFolderFilesList, #imagePreviewContainer {
+            margin-top:10px; 
+            max-height: none; /* 移除最大高度限制，让它能够填充剩余空间 */
+            overflow-y:auto; 
+            border:1px solid #eee; 
+            padding:5px;
+        }
+        #customPrompt {
+            flex-grow: 1;
+            width: calc(100% - 22px); /* 保持原有宽度计算方式 */
+            min-height: 150px; /* 调整最小高度 */
+            resize: vertical;
+        }
+        .action-button-container {
+            padding: 15px;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.05);
+            text-align: center;
+            margin-top: auto; /* 将按钮推到底部 */
+        }
+        #submitBtn, #saveApiSettingsBtn {
+            width: auto;
+            padding: 12px 25px;
+        }
+
+        /* 原有样式调整 */
+        .container { /* API设置页面使用这个 */
+            background-color: #fff;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            max-width: 600px; /* API设置页面不需要太宽 */
+            margin: 20px auto;
+        }
+        h1 {
+            color: #5a5a5a;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input[type="text"], input[type="password"], select, textarea {
+            width: calc(100% - 22px);
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .button-group button, button[type="submit"], .file-input-button {
+            background-color: #007bff;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin-right: 10px;
+        }
+        .button-group button:hover, button[type="submit"]:hover, .file-input-button:hover {
+            background-color: #0056b3;
+        }
+        .file-input-button {
+            display: inline-block;
+            position: relative;
+        }
+        input[type="file"] {
+            display: block; 
+            margin-top: 5px;
+        }
+        .progress-bar-container {
+            width: 100%;
+            background-color: #e0e0e0;
+            border-radius: 4px;
+            margin-top: 10px;
+            overflow: hidden; 
+        }
+        .progress-bar {
+            width: 0%;
+            height: 20px;
+            background-color: #4caf50;
+            text-align: center;
+            line-height: 20px;
+            color: white;
+            border-radius: 4px;
+            transition: width 0.3s ease-in-out;
+        }
+        #results {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            background-color: #f9f9f9;
+            max-height: 200px; /* 调整结果区域高度 */
+            overflow-y: auto;
+        }
+        .result-item {
+            padding: 5px 0;
+            border-bottom: 1px dashed #eee;
+        }
+        .result-item:last-child {
+            border-bottom: none;
+        }
+        .status-success {
+            color: green;
+        }
+        .status-error {
+            color: red;
+        }
+        .preset-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 5px;
+        }
+        .preset-controls input[type="text"] {
+            flex-grow: 1;
+        }
+        .folder-upload-note {
+            font-size: 0.9em;
+            color: #666;
+            margin-top: 5px;
+        }
+        #selectedFolderFilesList {
+            margin-top:10px; 
+            max-height: none; /* 移除最大高度限制，让它能够填充剩余空间 */
+            overflow-y:auto; 
+            border:1px solid #eee; 
+            padding:5px;
+        }
+        #imagePreviewContainer img {
+            max-width: 100px;
+            max-height: 100px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            object-fit: cover; /* 确保图片填充整个区域 */
+            height: 100px; /* 固定高度 */
+        }
+    </style>
+</head>
+<body>
+    <div class="top-nav">
+        <button class="nav-button active" onclick="showPage('imageProcessingPage')">图片处理</button>
+        <button class="nav-button" onclick="showPage('apiSettingsPage')">API设置</button>
+    </div>
+
+    <!-- 图片处理页面 -->
+    <div id="imageProcessingPage" class="page-container active">
+        <h1>Axin豆包提示词反推工具 - 图片处理</h1>
+        <div class="content-wrapper">
+            <div class="left-panel panel-section">
+                <label for="customPrompt">自定义提示词 (约束智能体人设):</label>
+                <textarea id="customPrompt" name="customPrompt" placeholder="例如：请生成一段详细的、富有创意的提示词，用于AI绘画模型，风格偏向赛博朋克..."></textarea>
+                <div class="preset-controls" style="margin-top:10px;">
+                    <input type="text" id="presetName" placeholder="预设名称 (可选)">
+                    <button type="button" id="savePresetBtn">保存当前为预设</button>
+                    <select id="presetSelector" onchange="applyPreset(this.value)">
+                        <option value="">选择历史预设</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="right-panel">
+                <div class="panel-section image-selection-area">
+                    <label for="imageFiles">2. 选择图片文件 (可多选):</label>
+                    <input type="file" id="imageFiles" name="images" multiple accept="image/*">
+                    <span id="fileCount" class="file-count-text"></span>
+                    
+                    <label for="folderInput" style="margin-top: 15px;">或者选择整个图片文件夹:</label>
+                    <input type="file" id="folderInput" webkitdirectory directory multiple accept="image/*">
+                    <p class="folder-upload-note">注意: 文件夹选择功能在某些浏览器上可能表现不一致。</p>
+                    <span id="folderFileCount" class="file-count-text"></span>
+                    <div id="selectedFolderFilesList"></div>
+                </div>
+                <div class="panel-section image-preview-area" id="imagePreviewContainer">
+                    <!-- 图片预览将显示在这里 -->
+                </div>
+                <div class="panel-section">
+                    <label for="outputPath">4. 输出文件夹路径:</label>
+                    <div style="display: flex; gap: 10px;">
+                        <input type="text" id="outputPath" name="outputPath" placeholder="输出文件夹路径" style="flex-grow: 1;">
+                        <button type="button" id="selectOutputPathBtn" style="white-space: nowrap;">选择路径</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="action-button-container">
+            <button type="button" id="submitBtn">5. 一键反推</button>
+        </div>
+        <div class="progress-bar-container" style="display: none;">
+            <div id="progressBar" class="progress-bar">0%</div>
+        </div>
+        <div id="results" style="display: none;">
+            <h3>处理结果:</h3>
+            <div id="resultDetails"></div>
+        </div>
+    </div>
+
+    <!-- API设置页面 -->
+    <div id="apiSettingsPage" class="page-container">
+        <div class="container">
+            <h1>API 设置</h1>
+            <div class="form-group">
+                <label for="modelIdInput">模型Endpoint ID:</label>
+                <input type="text" id="modelIdInput" placeholder="请输入模型Endpoint ID">
+            </div>
+            <div class="form-group">
+                <label for="apiKeyInput">API Key:</label>
+                <input type="password" id="apiKeyInput" placeholder="请输入API Key">
+            </div>
+            <button type="button" id="saveApiSettingsBtn">保存设置</button>
+        </div>
+    </div>
+        <script th:inline="javascript">
+        /*<![CDATA[*/
+        document.addEventListener('DOMContentLoaded', () => {
+            const imageProcessingPage = document.getElementById('imageProcessingPage');
+            const apiSettingsPage = document.getElementById('apiSettingsPage');
+            
+            // 页面切换逻辑
+            function showPage(pageId) {
+                document.querySelectorAll('.page-container').forEach(page => page.classList.remove('active'));
+                document.querySelectorAll('.nav-button').forEach(btn => btn.classList.remove('active'));
+                document.getElementById(pageId).classList.add('active');
+                if (pageId === 'imageProcessingPage') {
+                    document.querySelector('.nav-button[onclick="showPage(\'imageProcessingPage\')"]').classList.add('active');
+                } else if (pageId === 'apiSettingsPage') {
+                    document.querySelector('.nav-button[onclick="showPage(\'apiSettingsPage\')"]').classList.add('active');
+                }
+            }
+            const imageProcessingBtn = document.getElementById('imageProcessingBtn');
+            const apiSettingsBtn = document.getElementById('apiSettingsBtn');
+        
+            // API 设置相关元素
+            const apiKeyInput = document.getElementById('apiKeyInput'); // API Key 输入框在API设置页面
+            const modelIdInput = document.getElementById('modelIdInput'); // Model ID 输入框在API设置页面
+            const saveApiSettingsBtn = document.getElementById('saveApiSettingsBtn');
+        
+            // 图片处理相关元素
+            const imageFilesInput = document.getElementById('imageFiles');
+            const folderInput = document.getElementById('folderInput');
+            const customPromptInput = document.getElementById('customPrompt');
+            const outputPathInput = document.getElementById('outputPath');
+            const submitBtn = document.getElementById('submitBtn');
+            const progressBarContainer = document.getElementById('progressBarContainer');
+            const progressBar = document.getElementById('progressBar');
+            const resultsDiv = document.getElementById('results');
+            const resultDetailsDiv = document.getElementById('resultDetails');
+            const imagePreviewContainer = document.getElementById('imagePreviewArea');
+            const selectedFolderFilesList = document.getElementById('selectedFolderFilesList');
+        
+            let folderSelectedFiles = []; // 用于存储文件夹选择的文件对象
+        
+            // 预设相关
+            const presetNameInput = document.getElementById('presetNameInput');
+            const savePresetBtn = document.getElementById('savePresetBtn');
+            const presetSelect = document.getElementById('presetSelect');
+            const loadPresetBtn = document.getElementById('loadPresetBtn');
+            const deletePresetBtn = document.getElementById('deletePresetBtn');
+        
+            // 页面切换逻辑
+            function showPage(pageId) {
+                [imageProcessingPage, apiSettingsPage].forEach(page => page.classList.remove('active'));
+                [imageProcessingBtn, apiSettingsBtn].forEach(btn => btn.classList.remove('active'));
+                document.getElementById(pageId).classList.add('active');
+                if (pageId === 'imageProcessingPage') {
+                    imageProcessingBtn.classList.add('active');
+                } else if (pageId === 'apiSettingsPage') {
+                    apiSettingsBtn.classList.add('active');
+                }
+            }
+            imageProcessingBtn.addEventListener('click', () => showPage('imageProcessingPage'));
+            apiSettingsBtn.addEventListener('click', () => showPage('apiSettingsPage'));
+        
+            // 更新文件选择和预览的函数
+            function updateFileSelectionAndPreview() {
+                imagePreviewContainer.innerHTML = ''; // 清空现有预览
+                selectedFolderFilesList.innerHTML = ''; // 清空文件夹文件列表
+        
+                // 处理直接选择的文件
+                if (imageFilesInput.files.length > 0) {
+                    Array.from(imageFilesInput.files).forEach(file => {
+                        if (file.type.startsWith('image/')) {
+                            const reader = new FileReader();
+                            reader.onload = function(e) {
+                                const img = document.createElement('img');
+                                img.src = e.target.result;
+                                img.title = file.name;
+                                imagePreviewContainer.appendChild(img);
+                            }
+                            reader.readAsDataURL(file);
+                        }
+                    });
+                }
+        
+                // 处理文件夹选择的文件 (仅显示文件名)
+                if (folderSelectedFiles.length > 0) {
+                    const ul = document.createElement('ul');
+                    folderSelectedFiles.forEach(file => {
+                        const li = document.createElement('li');
+                        li.textContent = file.name;
+                        ul.appendChild(li);
+                    });
+                    selectedFolderFilesList.appendChild(ul);
+                    selectedFolderFilesList.style.display = 'block';
+                } else {
+                    selectedFolderFilesList.style.display = 'none';
+                }
+            }
+        
+            imageFilesInput.addEventListener('change', updateFileSelectionAndPreview);
+            folderInput.addEventListener('change', (event) => {
+                folderSelectedFiles = Array.from(event.target.files);
+                updateFileSelectionAndPreview();
+            });
+        
+            // 保存API设置
+            saveApiSettingsBtn.addEventListener('click', () => {
+                const apiKey = apiKeyInput.value.trim();
+                const modelId = modelIdInput.value.trim();
+                if (apiKey && modelId) {
+                    localStorage.setItem('doubaoApiKey', apiKey);
+                    localStorage.setItem('doubaoModelId', modelId);
+                    alert('API设置已保存！');
+                } else {
+                    alert('API Key 和 模型Endpoint ID 不能为空！');
+                }
+            });
+        
+            // 加载已保存的API设置
+            function loadApiSettings() {
+                const savedApiKey = localStorage.getItem('doubaoApiKey');
+                const savedModelId = localStorage.getItem('doubaoModelId');
+                if (savedApiKey) {
+                    apiKeyInput.value = savedApiKey;
+                }
+                if (savedModelId) {
+                    modelIdInput.value = savedModelId;
+                }
+            }
+        
+            // “一键反推”按钮的事件监听器
+            submitBtn.addEventListener('click', async () => {
+                const apiKey = localStorage.getItem('doubaoApiKey');
+                const modelId = localStorage.getItem('doubaoModelId');
+        
+                if (!apiKey || !modelId) {
+                    alert('请先在“API设置”页面配置并保存API Key和模型Endpoint ID！');
+                    showPage('apiSettingsPage');
+                    return;
+                }
+                if (!outputPathInput.value.trim()) {
+                    alert('请填写输出文件夹路径！');
+                    return;
+                }
+        
+                submitBtn.disabled = true;
+                submitBtn.textContent = '处理中...';
+                progressBarContainer.style.display = 'block';
+                progressBar.style.width = '0%';
+                progressBar.textContent = '0%';
+                resultsDiv.style.display = 'none';
+                resultDetailsDiv.innerHTML = '';
+        
+                const formData = new FormData();
+                formData.append('apiKey', apiKey);
+                formData.append('modelId', modelId);
+                formData.append('customPrompt', customPromptInput.value);
+                formData.append('outputPath', outputPathInput.value);
+        
+                let totalFilesToUpload = 0;
+        
+                for (let i = 0; i < imageFilesInput.files.length; i++) {
+                    formData.append('images', imageFilesInput.files[i]);
+                    totalFilesToUpload++;
+                }
+        
+                if (folderSelectedFiles.length > 0) {
+                    folderSelectedFiles.forEach(file => {
+                        formData.append('images', file);
+                        totalFilesToUpload++;
+                    });
+                }
+                
+                if (totalFilesToUpload === 0) {
+                    alert('请至少选择一个图片文件或一个包含图片的文件夹。');
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = '5. 一键反推';
+                    progressBarContainer.style.display = 'none';
+                    return;
+                }
+        
+                let currentProgress = 0;
+                const progressInterval = setInterval(() => {
+                    currentProgress += 10;
+                    if (currentProgress <= 100) {
+                        progressBar.style.width = currentProgress + '%';
+                        progressBar.textContent = currentProgress + '%';
+                    } else {
+                        clearInterval(progressInterval);
+                    }
+                }, 200);
+        
+                try {
+                    const response = await fetch('/reverse-prompt', {
+                        method: 'POST',
+                        body: formData
+                    });
+        
+                    clearInterval(progressInterval);
+                    const data = await response.json();
+        
+                    progressBar.style.width = '100%';
+                    progressBar.textContent = '100%';
+                    resultsDiv.style.display = 'block';
+        
+                    if (response.ok && data.status === 'success') {
+                        resultDetailsDiv.innerHTML = `<p class="status-success">${data.message}</p>`;
+                        if (data.results && data.results.length > 0) {
+                            const ul = document.createElement('ul');
+                            data.results.forEach(item => {
+                                const li = document.createElement('li');
+                                li.className = 'result-item';
+                                if (item.status === 'success') {
+                                    li.innerHTML = `<span class="status-success">成功:</span> ${item.file} - <a href="/download?filePath=${encodeURIComponent(item.filePath)}" target="_blank">下载</a>`;
+                                } else {
+                                    li.innerHTML = `<span class="status-error">失败:</span> ${item.file} - ${item.message}`;
+                                }
+                                ul.appendChild(li);
+                            });
+                            resultDetailsDiv.appendChild(ul);
+                        } else {
+                            resultDetailsDiv.innerHTML += '<p>没有生成任何结果文件。</p>';
+                        }
+                    } else {
+                        resultDetailsDiv.innerHTML = `<p class="status-error">请求失败: ${data.message || response.statusText}</p>`;
+                    }
+        
+                } catch (error) {
+                    console.error('请求错误:', error);
+                    clearInterval(progressInterval);
+                    progressBar.style.width = '100%';
+                    progressBar.textContent = '错误';
+                    progressBar.style.backgroundColor = 'red';
+                    resultsDiv.style.display = 'block';
+                    resultDetailsDiv.innerHTML = `<p class="status-error">处理请求时发生错误: ${error.message}</p>`;
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = '5. 一键反推';
+                    imageFilesInput.value = null;
+                    folderInput.value = null;
+                    folderSelectedFiles = [];
+                    updateFileSelectionAndPreview();
+                }
+            });
+        
+            // 初始化
+            loadPresets();
+            loadApiSettings();
+            showPage('imageProcessingPage');
+            
+            // 选择输出路径按钮的事件监听器
+            document.getElementById('selectOutputPathBtn').addEventListener('click', async () => {
+                try {
+                    // 使用现代浏览器的目录选择API
+                    if ('showDirectoryPicker' in window) {
+                        const dirHandle = await window.showDirectoryPicker();
+                        // 注意：出于安全考虑，浏览器无法获取完整的文件系统路径
+                        // 这里我们使用一个提示让用户手动输入完整路径
+                        const userPath = prompt(`已选择文件夹: ${dirHandle.name}\n\n请输入该文件夹的完整路径:`, '');
+                        if (userPath && userPath.trim()) {
+                            outputPathInput.value = userPath.trim();
+                        }
+                    } else {
+                        // 降级方案：让用户手动输入路径
+                        const path = prompt('您的浏览器不支持文件夹选择功能。\n请手动输入输出文件夹的完整路径:', '');
+                        if (path && path.trim()) {
+                            outputPathInput.value = path.trim();
+                        }
+                    }
+                } catch (error) {
+                    if (error.name !== 'AbortError') {
+                        console.error('选择文件夹时发生错误:', error);
+                        alert('选择文件夹时发生错误: ' + error.message);
+                    }
+                    // 用户取消选择不做处理
+                }
+            });
+        });
+        /*]]>*/
+        </script>
+</body>
+</html>
